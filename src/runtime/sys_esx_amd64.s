@@ -285,29 +285,33 @@ TEXT runtime·futex(SB),NOSPLIT,$0
 
 // int32 clone(int32 flags, void *stack, M *mp, G *gp, void (*fn)(void));
 TEXT runtime·clone(SB),NOSPLIT,$0
-	MOVL	flags+0(FP), DI
-	MOVQ	stack+8(FP), SI
-	MOVQ	$0, DX
-	MOVQ	$0, R10
+        MOVQ    $0, DX
+        MOVQ    $0, R10
 
-	// Copy mp, gp, fn off parent stack for use by child.
-	// Careful: Linux system call clobbers CX and R11.
-	MOVQ	mp+16(FP), R8
-	MOVQ	gp+24(FP), R9
-	MOVQ	fn+32(FP), R12
+        MOVL    flags+0(FP), DI
+        MOVQ    stack+8(FP), SI
+        MOVQ    mp+16(FP), R8
+        MOVQ    gp+24(FP), R9
+        MOVQ    fn+32(FP), R12
 
-	MOVL	$56, AX
-	SYSCALL
+        MOVQ    R8, -24(SI)
+        MOVQ    R9, -16(SI)
+        MOVQ    R12, -8(SI)
 
-	// In parent, return.
-	CMPQ	AX, $0
-	JEQ	3(PC)
-	MOVL	AX, ret+40(FP)
-	RET
+        MOVL    $56, AX
+        SYSCALL
 
-	// In child, on new stack.
-	MOVQ	SI, SP
+        // In parent, return.
+        CMPQ    AX, $0
+        JEQ     3(PC)
+        MOVL    AX, ret+40(FP)
+        RET
 
+       // In child, on new stack.
+        MOVQ    -24(SP), R8
+        MOVQ    -16(SP), R9
+        MOVQ    -8(SP),  R12
+        
 	// If g or m are nil, skip Go-related setup.
 	CMPQ	R8, $0    // m
 	JEQ	nog
