@@ -876,6 +876,8 @@ func TestStartProcess(t *testing.T) {
 	switch runtime.GOOS {
 	case "android":
 		t.Skip("android doesn't have /bin/pwd")
+	case "esx":
+		t.Skip("esx doesn't have /bin/pwd")
 	case "windows":
 		cmd = Getenv("COMSPEC")
 		dir = Getenv("SystemRoot")

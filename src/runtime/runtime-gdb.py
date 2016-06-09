@@ -202,29 +202,29 @@ goobjfile.pretty_printers.extend([makematcher(var) for var in vars().values() if
 def is_iface(val):
 	try:
 		return str(val['tab'].type) == "struct runtime.itab *" and str(val['data'].type) == "void *"
-	except gdb.error:
+	except:
 		pass
 
 
 def is_eface(val):
 	try:
 		return str(val['_type'].type) == "struct runtime._type *" and str(val['data'].type) == "void *"
-	except gdb.error:
+	except:
 		pass
 
 
 def lookup_type(name):
 	try:
 		return gdb.lookup_type(name)
-	except gdb.error:
+	except:
 		pass
 	try:
 		return gdb.lookup_type('struct ' + name)
-	except gdb.error:
+	except:
 		pass
 	try:
 		return gdb.lookup_type('struct ' + name[1:]).pointer()
-	except gdb.error:
+	except:
 		pass
 
 
@@ -352,7 +352,7 @@ class DTypeFunc(gdb.Function):
 	def invoke(self, obj):
 		try:
 			return obj['data'].cast(iface_dtype(obj))
-		except gdb.error:
+		except:
 			pass
 		return obj
 
@@ -392,7 +392,7 @@ class GoroutinesCmd(gdb.Command):
 			try:
 				#python3 / newer versions of gdb
 				pc = int(pc)
-			except gdb.error:
+			except:
 				# str(pc) can return things like
 				# "0x429d6c <runtime.gopark+284>", so
 				# chop at first space.
@@ -445,7 +445,7 @@ class GoroutineCmd(gdb.Command):
 		try:
 			#python3 / newer versions of gdb
 			pc = int(pc)
-		except gdb.error:
+		except:
 			pc = int(str(pc).split(None, 1)[0], 16)
 		save_frame = gdb.selected_frame()
 		gdb.parse_and_eval('$save_sp = $sp')
