@@ -17,74 +17,8 @@ import "unsafe"
  * Wrapped
  */
 
-func Access(path string, mode uint32) (err error) {
-	return Faccessat(_AT_FDCWD, path, mode, 0)
-}
-
-func Chmod(path string, mode uint32) (err error) {
-	return Fchmodat(_AT_FDCWD, path, mode, 0)
-}
-
-func Chown(path string, uid int, gid int) (err error) {
-	return Fchownat(_AT_FDCWD, path, uid, gid, 0)
-}
-
 func Creat(path string, mode uint32) (fd int, err error) {
 	return Open(path, O_CREAT|O_WRONLY|O_TRUNC, mode)
-}
-
-//sys	linkat(olddirfd int, oldpath string, newdirfd int, newpath string, flags int) (err error)
-
-func Link(oldpath string, newpath string) (err error) {
-	return linkat(_AT_FDCWD, oldpath, _AT_FDCWD, newpath, 0)
-}
-
-func Mkdir(path string, mode uint32) (err error) {
-	return Mkdirat(_AT_FDCWD, path, mode)
-}
-
-func Mknod(path string, mode uint32, dev int) (err error) {
-	return Mknodat(_AT_FDCWD, path, mode, dev)
-}
-
-func Open(path string, mode int, perm uint32) (fd int, err error) {
-	return openat(_AT_FDCWD, path, mode|O_LARGEFILE, perm)
-}
-
-//sys	openat(dirfd int, path string, flags int, mode uint32) (fd int, err error)
-
-func Openat(dirfd int, path string, flags int, mode uint32) (fd int, err error) {
-	return openat(dirfd, path, flags|O_LARGEFILE, mode)
-}
-
-//sys	readlinkat(dirfd int, path string, buf []byte) (n int, err error)
-
-func Readlink(path string, buf []byte) (n int, err error) {
-	return readlinkat(_AT_FDCWD, path, buf)
-}
-
-func Rename(oldpath string, newpath string) (err error) {
-	return Renameat(_AT_FDCWD, oldpath, _AT_FDCWD, newpath)
-}
-
-func Rmdir(path string) error {
-	return unlinkat(_AT_FDCWD, path, _AT_REMOVEDIR)
-}
-
-//sys	symlinkat(oldpath string, newdirfd int, newpath string) (err error)
-
-func Symlink(oldpath string, newpath string) (err error) {
-	return symlinkat(oldpath, _AT_FDCWD, newpath)
-}
-
-func Unlink(path string) error {
-	return unlinkat(_AT_FDCWD, path, 0)
-}
-
-//sys	unlinkat(dirfd int, path string, flags int) (err error)
-
-func Unlinkat(dirfd int, path string) error {
-	return unlinkat(dirfd, path, 0)
 }
 
 //sys	utimes(path string, times *[2]Timeval) (err error)
@@ -163,7 +97,7 @@ func Getgroups() (gids []int, err error) {
 		return nil, nil
 	}
 
-	// Sanity check group count. Max is 1<<16 on Linux.
+	// Sanity check group count.  Max is 1<<16 on Linux.
 	if n < 0 || n > 1<<20 {
 		return nil, EINVAL
 	}
@@ -198,8 +132,8 @@ type WaitStatus uint32
 // 0x7F (stopped), or a signal number that caused an exit.
 // The 0x80 bit is whether there was a core dump.
 // An extra number (exit code, signal causing a stop)
-// is in the high bits. At least that's the idea.
-// There are various irregularities. For example, the
+// is in the high bits.  At least that's the idea.
+// There are various irregularities.  For example, the
 // "continued" status is 0xFFFF, distinguishing itself
 // from stopped via the core dump bit.
 
@@ -620,7 +554,7 @@ func ptracePeek(req int, pid int, addr uintptr, out []byte) (count int, err erro
 
 	var buf [sizeofPtr]byte
 
-	// Leading edge. PEEKTEXT/PEEKDATA don't require aligned
+	// Leading edge.  PEEKTEXT/PEEKDATA don't require aligned
 	// access (PEEKUSER warns that it might), but if we don't
 	// align our reads, we might straddle an unmapped page
 	// boundary and not get the bytes leading up to the page
@@ -815,6 +749,18 @@ func Mount(source string, target string, fstype string, flags uintptr, data stri
 /*
  * Direct access
  */
+//sys	Access(path string, mode uint32) (err error)
+//sys	Chmod(path string, mode uint32) (err error)
+//sys	Chown(path string, uid int, gid int) (err error)
+//sys	Link(path string, link string) (err error)
+//sys	Open(path string, mode int, perm uint32) (fd int, err error)
+//sys	Mknod(path string, mode uint32, dev int) (err error)
+//sys	Readlink(path string, buf []byte) (n int, err error)
+//sys	Rename(from string, to string) (err error)
+//sys	Rmdir(path string) (err error)
+//sys	Symlink(path string, link string) (err error)
+//sys	Unlink(path string) (err error)
+
 //sys	Acct(path string) (err error)
 //sys	Adjtimex(buf *Timex) (state int, err error)
 //sys	Chdir(path string) (err error)
@@ -827,18 +773,16 @@ func Mount(source string, target string, fstype string, flags uintptr, data stri
 //sysnb	EpollCtl(epfd int, op int, fd int, event *EpollEvent) (err error)
 //sys	EpollWait(epfd int, events []EpollEvent, msec int) (n int, err error)
 //sys	Exit(code int) = SYS_EXIT_GROUP
-//sys	Faccessat(dirfd int, path string, mode uint32, flags int) (err error)
 //sys	Fallocate(fd int, mode uint32, off int64, len int64) (err error)
 //sys	Fchdir(fd int) (err error)
 //sys	Fchmod(fd int, mode uint32) (err error)
-//sys	Fchmodat(dirfd int, path string, mode uint32, flags int) (err error)
-//sys	Fchownat(dirfd int, path string, uid int, gid int, flags int) (err error)
 //sys	fcntl(fd int, cmd int, arg int) (val int, err error)
 //sys	Fdatasync(fd int) (err error)
 //sys	Flock(fd int, how int) (err error)
 //sys	Fsync(fd int) (err error)
-//sys	Getdents(fd int, buf []byte) (n int, err error) = _SYS_getdents
+//sys	Getdents(fd int, buf []byte) (n int, err error) = SYS_GETDENTS64
 //sysnb	Getpgid(pid int) (pgid int, err error)
+//sys	Mkdir(path string, mode uint32) (err error)
 
 func Getpgrp() (pid int) {
 	pid, _ = Getpgid(0)

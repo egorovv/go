@@ -111,18 +111,3 @@ ok2:
 	MOVQ	$0, err+72(FP)
 	RET
 
-// func gettimeofday(tv *Timeval) (err uintptr)
-TEXT ·gettimeofday(SB),NOSPLIT,$0-16
-	MOVQ	tv+0(FP), DI
-	MOVQ	$0, SI
-	MOVQ	runtime·__vdso_gettimeofday_sym(SB), AX
-	CALL	AX
-
-	CMPQ	AX, $0xfffffffffffff001
-	JLS	ok7
-	NEGQ	AX
-	MOVQ	AX, err+8(FP)
-	RET
-ok7:
-	MOVQ	$0, err+8(FP)
-	RET
