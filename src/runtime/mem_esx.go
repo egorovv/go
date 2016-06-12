@@ -14,40 +14,15 @@ const (
 	_EACCES    = 13
 )
 
-// NOTE: vec must be just 1 byte long here.
-// Mincore returns ENOMEM if any of the pages are unmapped,
-// but we want to know that all of the pages are unmapped.
-// To make these the same, we can only ask about one page
-// at a time. See golang.org/issue/7476.
-var addrspace_vec [1]byte
+var mmapfd int32
 
-func addrspace_free(v unsafe.Pointer, n uintptr) bool {
-	var chunk uintptr
-	for off := uintptr(0); off < n; off += chunk {
-		chunk = _PAGE_SIZE * uintptr(len(addrspace_vec))
-		if chunk > (n - off) {
-			chunk = n - off
-		}
-		errval := mincore(unsafe.Pointer(uintptr(v)+off), chunk, &addrspace_vec[0])
-		// ENOMEM means unmapped, which is what we want.
-		// Anything else we assume means the pages are mapped.
-		if errval != -_ENOMEM {
-			return false
-		}
-	}
-	return true
+func meminit() {
+	var mmapname = []byte("/tmp/gomem\x00")
+	mmapfd = open(&mmapname[0], 0x40, 0666)
 }
 
 func mmap_fixed(v unsafe.Pointer, n uintptr, prot, flags, fd int32, offset uint32) unsafe.Pointer {
-	p := mmap(v, n, prot, flags, fd, offset)
-	// On some systems, mmap ignores v without
-	// MAP_FIXED, so retry if the address space is free.
-	if p != v && addrspace_free(v, n) {
-		if uintptr(p) > 4096 {
-			munmap(p, n)
-		}
-		p = mmap(v, n, prot, flags|_MAP_FIXED, fd, offset)
-	}
+	p := mmap(v, n, prot, flags|_MAP_FIXED, fd, offset)
 	return p
 }
 
@@ -171,24 +146,7 @@ func sysFault(v unsafe.Pointer, n uintptr) {
 }
 
 func sysReserve(v unsafe.Pointer, n uintptr, reserved *bool) unsafe.Pointer {
-	// On 64-bit, people with ulimit -v set complain if we reserve too
-	// much address space. Instead, assume that the reservation is okay
-	// if we can reserve at least 64K and check the assumption in SysMap.
-	// Only user-mode Linux (UML) rejects these requests.
-	if sys.PtrSize == 8 && uint64(n) > 1<<32 {
-		p := mmap_fixed(v, 64<<10, _PROT_NONE, _MAP_ANON|_MAP_PRIVATE, -1, 0)
-		if p != v {
-			if uintptr(p) >= 4096 {
-				munmap(p, 64<<10)
-			}
-			return nil
-		}
-		munmap(p, 64<<10)
-		*reserved = false
-		return v
-	}
-
-	p := mmap(v, n, _PROT_NONE, _MAP_ANON|_MAP_PRIVATE, -1, 0)
+	p := mmap(v, n, _PROT_NONE, _MAP_PRIVATE|_MAP_NORESERVE, mmapfd, 0)
 	if uintptr(p) < 4096 {
 		return nil
 	}
