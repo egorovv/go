@@ -6,21 +6,22 @@
 
 package os
 
+import (
+	"strings"
+	"syscall"
+	"unsafe"
+)
+
 func hostname() (name string, err error) {
-	f, err := Open("/proc/sys/kernel/hostname")
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-
-	var buf [512]byte // Enough for a DNS name.
-	n, err := f.Read(buf[0:])
+	var un syscall.Utsname
+	err = syscall.Uname(&un)
 	if err != nil {
 		return "", err
 	}
 
-	if n > 0 && buf[n-1] == '\n' {
-		n--
-	}
-	return string(buf[0:n]), nil
+	// string from a slice of byte array
+	nodename := string((*(*[65]byte)(unsafe.Pointer(&un.Nodename)))[:])
+	end := strings.Index(nodename, "\x00")
+	name = nodename[:end]
+	return name, err
 }
