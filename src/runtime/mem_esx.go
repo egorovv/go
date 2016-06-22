@@ -14,11 +14,21 @@ const (
 	_EACCES    = 13
 )
 
-var mmapfd int32
+var mmapLo uintptr = 0x00a0 << 32
+var mmapHi uintptr = 0x00c0 << 32
 
 func meminit() {
-	var mmapname = []byte("/tmp/gomem\x00")
-	mmapfd = open(&mmapname[0], 0x40, 0666)
+	p := mmap(unsafe.Pointer(mmapLo), _PAGE_SIZE, _PROT_NONE, _MAP_ANON|_MAP_PRIVATE, -1, 0)
+
+	if uintptr(p) < 4096 {
+		print("runtime: mmap failed\n")
+		exit(2)
+	}
+
+	if uintptr(p) != mmapLo {
+		print("runtime: mmap failed\n")
+		exit(2)
+	}
 }
 
 func mmap_fixed(v unsafe.Pointer, n uintptr, prot, flags, fd int32, offset uint32) unsafe.Pointer {
@@ -30,7 +40,8 @@ func mmap_fixed(v unsafe.Pointer, n uintptr, prot, flags, fd int32, offset uint3
 // prevents us from allocating more stack.
 //go:nosplit
 func sysAlloc(n uintptr, sysStat *uint64) unsafe.Pointer {
-	p := mmap(nil, n, _PROT_READ|_PROT_WRITE, _MAP_ANON|_MAP_PRIVATE, -1, 0)
+	p := mmap(nil, round(n, _PAGE_SIZE), _PROT_READ|_PROT_WRITE, _MAP_ANON|_MAP_PRIVATE, -1, 0)
+
 	if uintptr(p) < 4096 {
 		if uintptr(p) == _EACCES {
 			print("runtime: mmap: access denied\n")
@@ -41,6 +52,9 @@ func sysAlloc(n uintptr, sysStat *uint64) unsafe.Pointer {
 			exit(2)
 		}
 		return nil
+	}
+	if uintptr(p)+n > mmapHi {
+		throw("runtime: bad mmap address")
 	}
 	mSysStatInc(sysStat, n)
 	return p
@@ -138,7 +152,7 @@ func sysUsed(v unsafe.Pointer, n uintptr) {
 //go:nosplit
 func sysFree(v unsafe.Pointer, n uintptr, sysStat *uint64) {
 	mSysStatDec(sysStat, n)
-	munmap(v, n)
+	munmap(v, round(n, _PAGE_SIZE))
 }
 
 func sysFault(v unsafe.Pointer, n uintptr) {
@@ -146,32 +160,26 @@ func sysFault(v unsafe.Pointer, n uintptr) {
 }
 
 func sysReserve(v unsafe.Pointer, n uintptr, reserved *bool) unsafe.Pointer {
-	p := mmap(v, n, _PROT_NONE, _MAP_PRIVATE|_MAP_NORESERVE, mmapfd, 0)
+	if uintptr(v) < mmapHi {
+		return nil
+	}
+
+	p := mmap(v, 64<<10, _PROT_NONE, _MAP_ANON|_MAP_PRIVATE, -1, 0)
 	if uintptr(p) < 4096 {
 		return nil
 	}
-	*reserved = true
+
+	munmap(v, 64<<10)
+	*reserved = false
+
 	return p
 }
 
 func sysMap(v unsafe.Pointer, n uintptr, reserved bool, sysStat *uint64) {
 	mSysStatInc(sysStat, n)
 
-	// On 64-bit, we don't actually have v reserved, so tread carefully.
-	if !reserved {
-		p := mmap_fixed(v, n, _PROT_READ|_PROT_WRITE, _MAP_ANON|_MAP_PRIVATE, -1, 0)
-		if uintptr(p) == _ENOMEM {
-			throw("runtime: out of memory")
-		}
-		if p != v {
-			print("runtime: address space conflict: map(", v, ") = ", p, "\n")
-			throw("runtime: address space conflict")
-		}
-		return
-	}
-
-	p := mmap(v, n, _PROT_READ|_PROT_WRITE, _MAP_ANON|_MAP_FIXED|_MAP_PRIVATE, -1, 0)
-	if uintptr(p) == _ENOMEM {
+	p := mmap(v, n, _PROT_READ|_PROT_WRITE, _MAP_ANON|_MAP_PRIVATE, -1, 0)
+	if uintptr(p) == _ENOMEM || uintptr(p) == _ENOSPC {
 		throw("runtime: out of memory")
 	}
 	if p != v {
