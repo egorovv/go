@@ -194,11 +194,20 @@ TEXT runtime·sigfwd(SB),NOSPLIT,$0-32
 	RET
 
 TEXT runtime·sigtramp(SB),NOSPLIT,$24
-	MOVQ	DI, 0(SP)   // signum
-	MOVQ	SI, 8(SP)   // info
-	MOVQ	DX, 16(SP)  // ctx
+        MOVQ    -8(FS), AX //g
+        MOVQ    g_m(AX), BX
+        MOVQ    m_gsignal(BX), BX
+        MOVQ    (g_stack+stack_hi)(BX), BX // g.m.gsignal.stack.hi
+        SUBQ    $32, BX
+	MOVQ	DI, 0(BX)   // signum
+	MOVQ	SI, 8(BX)   // info
+	MOVQ	DX, 16(BX)  // ctx
+	MOVQ	SP, 24(BX)  // old stack
+        MOVQ    BX, SP      // switch stack
+        
 	MOVQ	$runtime·sigtrampgo(SB), AX
 	CALL AX
+	MOVQ	24(SP), SP //restore stack
 	RET
 
 TEXT runtime·sigreturn(SB),NOSPLIT,$0
