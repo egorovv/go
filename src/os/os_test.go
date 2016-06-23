@@ -877,7 +877,9 @@ func TestStartProcess(t *testing.T) {
 	case "android":
 		t.Skip("android doesn't have /bin/pwd")
 	case "esx":
-		t.Skip("esx doesn't have /bin/pwd")
+		cmd = "/bin/sh"
+		dir = "/"
+		args = []string{"-c", "pwd"}
 	case "windows":
 		cmd = Getenv("COMSPEC")
 		dir = Getenv("SystemRoot")
@@ -1067,6 +1069,8 @@ func TestChdirAndGetwd(t *testing.T) {
 			}
 			dirs = []string{d1, d2}
 		}
+	case "esx":
+		dirs = []string{"/", "/var/lib", "/tmp"}
 	}
 	oldwd := Getenv("PWD")
 	for mode := 0; mode < 2; mode++ {
