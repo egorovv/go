@@ -317,7 +317,7 @@ func anyToSockaddr(rsa *RawSockaddrAny) (Sockaddr, error) {
 		}
 		return sa, nil
 
-	case AF_UNIX:
+	case AF_UNIX, AF_LLC: //esx < 6.5 returns PF_VMKUNIX
 		pp := (*RawSockaddrUnix)(unsafe.Pointer(rsa))
 		sa := new(SockaddrUnix)
 		if pp.Path[0] == 0 {
