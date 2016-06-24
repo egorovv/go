@@ -58,6 +58,8 @@ func testableNetwork(network string) bool {
 			}
 		case "android":
 			return false
+		case "esx":
+			return false
 		}
 	}
 	return true
