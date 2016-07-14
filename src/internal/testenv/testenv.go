@@ -39,6 +39,8 @@ func HasGoBuild() bool {
 		if strings.HasPrefix(runtime.GOARCH, "arm") {
 			return false
 		}
+	case "esx":
+		return false
 	}
 	return true
 }
