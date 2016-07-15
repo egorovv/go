@@ -27,6 +27,7 @@ var config struct {
 	user     string
 	password string
 	ssh      *ssh.ClientConfig
+	subdir   string
 	rootdir  string
 	testdir  string
 	remote   string
@@ -84,19 +85,13 @@ func getConfig() {
 		"/", "_", -1)
 }
 
-func put(c *ssh.Client, local, remote string) {
-	sftp, err := sftp.NewClient(c)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer sftp.Close()
-
-	stat, err := os.Stat(os.Args[1])
+func put(sftp *sftp.Client, local, remote string) {
+	stat, err := os.Stat(local)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	buf, err := ioutil.ReadFile(os.Args[1])
+	buf, err := ioutil.ReadFile(local)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -111,7 +106,43 @@ func put(c *ssh.Client, local, remote string) {
 	}
 
 	err = sftp.Chmod(remote, stat.Mode())
+}
 
+func putdir(sftp *sftp.Client, local, remote string) {
+	if fi, err := os.Stat(local); err != nil || !fi.IsDir() {
+		return
+	}
+
+	parts := strings.Split(remote, "/")
+	for i := 2; i <= len(parts); i++ {
+		dir := "/" + filepath.Join(parts[:i]...)
+		_, err := sftp.Stat(dir)
+		if err != nil {
+			err = sftp.Mkdir(dir)
+		}
+		if err != nil {
+			log.Panic(err)
+		}
+	}
+
+	filepath.Walk(local,
+		func(file string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.Mode().IsDir() {
+				_, err := sftp.Stat(config.testdir + "/" + file)
+				if err != nil {
+					err = sftp.Mkdir(remote + "/" + file)
+				}
+				if err != nil {
+					log.Panic(err)
+				}
+			} else if info.Mode().IsRegular() {
+				put(sftp, file, config.testdir+"/"+file)
+			}
+			return nil
+		})
 }
 
 func remove(c *ssh.Client, remote string) {
@@ -126,7 +157,7 @@ func remove(c *ssh.Client, remote string) {
 
 }
 
-func run(c *ssh.Client, prog string, args []string) error {
+func run(c *ssh.Client, prog string, args ...string) error {
 	session, err := c.NewSession()
 	if err != nil {
 		panic("Failed to create session: " + err.Error())
@@ -143,7 +174,8 @@ func run(c *ssh.Client, prog string, args []string) error {
 			config.mem)
 	}
 	fmt.Println(b.String())
-	cmd := fmt.Sprintf("cd %s && %s%s ", config.testdir, rp, prog) +
+	cmd := fmt.Sprintf("mkdir -p %s && cd %s && %s%s ",
+		config.testdir, config.testdir, rp, prog) +
 		strings.Join(args, ` `)
 	err = session.Run(cmd)
 	fmt.Println(b.String())
@@ -163,10 +195,18 @@ func main() {
 		panic("Failed to dial: " + err.Error())
 	}
 
-	remote := filepath.Join(config.rootdir, config.remote)
-	put(client, os.Args[1], remote)
+	sftp, err := sftp.NewClient(client)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer sftp.Close()
 
-	err = run(client, remote, os.Args[2:])
+	remote := filepath.Join(config.rootdir, config.remote)
+
+	put(sftp, os.Args[1], remote)
+	putdir(sftp, "testdata", config.testdir)
+
+	err = run(client, remote, os.Args[2:]...)
 
 	if !config.keep && err == nil {
 		remove(client, remote)
