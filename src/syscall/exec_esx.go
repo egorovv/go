@@ -10,6 +10,9 @@ import (
 	"unsafe"
 )
 
+func VMKForkExec(filepath *byte, argv, envp **byte, wdfd int32, initfds *int32, initfdslength uint32,
+	uid, gid int32, detached bool, pid *uint32) Errno
+
 // SysProcIDMap holds Container ID to Host ID mappings used for User Namespaces in Linux.
 // See user_namespaces(7).
 type SysProcIDMap struct {
@@ -46,6 +49,49 @@ func runtime_AfterFork()
 
 var ctid uint64
 
+//go:norace
+func forkAndExecInChild(argv0 *byte, argv, envv []*byte, chroot, dir *byte, attr *ProcAttr, sys *SysProcAttr, pipe int) (pid int, err Errno) {
+	return forkAndExecInChildLinux(argv0, argv, envv, chroot, dir, attr, sys, pipe)
+}
+
+//go:norace
+func forkAndExecInChildVmk(argv0 *byte, argv, envv []*byte, chroot, dir *byte, attr *ProcAttr, sys *SysProcAttr, pipe int) (int, Errno) {
+	var (
+		r1   uintptr
+		uid  int32 = -1
+		gid  int32 = -1
+		wdfd int32 = -1
+		pid  uint32
+		err  Errno
+	)
+
+	fd := make([]int32, len(attr.Files))
+	for i, ufd := range attr.Files {
+		fd[i] = int32(ufd)
+	}
+
+	if sys.Credential != nil {
+		uid = int32(sys.Credential.Uid)
+		gid = int32(sys.Credential.Gid)
+	}
+
+	if dir != nil {
+		r1, _, err = RawSyscall(SYS_OPEN, uintptr(unsafe.Pointer(dir)), O_RDONLY, 0)
+		if err != 0 {
+			return 0, err
+		}
+		wdfd = int32(r1)
+	}
+
+	err = VMKForkExec(argv0, &argv[0], &envv[0], wdfd, &fd[0], uint32(len(fd)), uid, gid, false, &pid)
+	RawSyscall(SYS_CLOSE, uintptr(wdfd), 0, 0)
+	if err != 0 {
+		// send error code on pipe
+		RawSyscall(SYS_WRITE, uintptr(pipe), uintptr(unsafe.Pointer(&err)), unsafe.Sizeof(err))
+	}
+	return int(pid), err
+}
+
 // Fork, dup fd onto 0..len(fd), and exec(argv0, argvv, envv) in child.
 // If a dup or exec fails, write the errno error to pipe.
 // (Pipe is close-on-exec so if exec succeeds, it will be closed.)
@@ -56,7 +102,7 @@ var ctid uint64
 // The calls to RawSyscall are okay because they are assembly
 // functions that do not grow the stack.
 //go:norace
-func forkAndExecInChild(argv0 *byte, argv, envv []*byte, chroot, dir *byte, attr *ProcAttr, sys *SysProcAttr, pipe int) (pid int, err Errno) {
+func forkAndExecInChildLinux(argv0 *byte, argv, envv []*byte, chroot, dir *byte, attr *ProcAttr, sys *SysProcAttr, pipe int) (pid int, err Errno) {
 	// Declare all variables at top in case any
 	// declarations require heap allocation (e.g., err1).
 	var (
